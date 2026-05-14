@@ -164,7 +164,7 @@ function onGo(target) {
 // ГЛАВНАЯ — статус работы
 // =====================================================================
 function refreshHomeStatus() {
-  const now = new Date();
+  const now = nowMsk();
   const hour = now.getHours();
   const status = document.getElementById('hero-status');
   if (!status) return;
@@ -365,10 +365,10 @@ function updateSelectedServicePill() {
   document.getElementById('selected-service-pill-3').textContent = text;
 }
 
-// Календарь — 14 ближайших дней
+// Календарь — 14 ближайших дней (по МСК)
 function renderDateGrid() {
   const grid = document.getElementById('date-grid');
-  const today = new Date();
+  const today = nowMsk();
   const days = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
@@ -392,12 +392,35 @@ function renderDateGrid() {
       grid.querySelectorAll('.date-cell').forEach(x => x.classList.remove('selected'));
       c.classList.add('selected');
       tg?.HapticFeedback?.selectionChanged?.();
-      // Если время уже выбрано — переходим автоматически
-      if (state.form.time) {
+      // Сразу пере-рендерим время (на случай если выбран сегодняшний день —
+      // надо отключить уже прошедшие слоты)
+      renderTimeGrid();
+      // Если время уже выбрано и оно ещё валидно — переходим автоматически
+      if (state.form.time && !isPastTime(state.form.date, state.form.time)) {
         setTimeout(nextBookStep, 250);
+      } else {
+        // если время было прошедшим — сбрасываем
+        if (state.form.time && isPastTime(state.form.date, state.form.time)) {
+          state.form.time = null;
+        }
       }
     });
   });
+}
+
+// Прошло ли время по МСК (для конкретного ISO-дня)?
+function isPastTime(dateIso, timeStr) {
+  if (!dateIso || !timeStr) return false;
+  const todayIso = todayMskIso();
+  if (dateIso > todayIso) return false;   // будущий день — всегда ОК
+  if (dateIso < todayIso) return true;    // прошедший день — всё нельзя
+  // Сегодня — сравниваем время
+  const now = nowMsk();
+  const [h, m] = timeStr.split(':').map(Number);
+  const slotMin = h * 60 + m;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  // Дополнительный буфер 30 минут — нельзя записаться на «через 5 минут»
+  return slotMin <= nowMin + 30;
 }
 
 // Сетка времени — 9:00 ... 19:00 с шагом 30 минут
@@ -408,11 +431,28 @@ function renderTimeGrid() {
     slots.push(`${pad(h)}:00`);
     slots.push(`${pad(h)}:30`);
   }
+  const todayIso = todayMskIso();
+  const isToday = state.form.date === todayIso;
   grid.innerHTML = slots.map(t => {
     const isSel = t === state.form.time;
-    return `<button class="time-cell ${isSel ? 'selected' : ''}" data-time="${t}">${t}</button>`;
+    const past = isPastTime(state.form.date, t);
+    const cls = [
+      'time-cell',
+      isSel ? 'selected' : '',
+      past ? 'disabled' : '',
+    ].filter(Boolean).join(' ');
+    return `<button class="${cls}" data-time="${t}" ${past ? 'disabled' : ''}>${t}</button>`;
   }).join('');
-  grid.querySelectorAll('.time-cell').forEach(c => {
+  // Если сегодня и нет ни одного доступного слота — подсказка
+  if (isToday) {
+    const allDisabled = slots.every(t => isPastTime(state.form.date, t));
+    if (allDisabled) {
+      grid.innerHTML = `<div class="empty" style="grid-column: 1/-1;">
+        На сегодня свободных слотов уже нет. Выберите завтра или позже.
+      </div>`;
+    }
+  }
+  grid.querySelectorAll('.time-cell:not(.disabled)').forEach(c => {
     c.addEventListener('click', () => {
       state.form.time = c.dataset.time;
       grid.querySelectorAll('.time-cell').forEach(x => x.classList.remove('selected'));
@@ -602,9 +642,9 @@ function renderAdminPanel() {
   // Бот ответит сообщением, которое мы получим через initData при следующем
   // открытии. Для демо — рисуем mock из локальных записей всех юзеров.
   const all = state.myBookings;
-  const today = isoDate(new Date());
-  const tomorrow = isoDate(addDays(new Date(), 1));
-  const weekEnd = isoDate(addDays(new Date(), 7));
+  const today = todayMskIso();
+  const tomorrow = isoDate(mskAddDays(1));
+  const weekEnd = isoDate(mskAddDays(7));
   document.getElementById('stat-today').textContent =
     all.filter(b => b.date === today && b.status !== 'cancelled').length;
   document.getElementById('stat-tomorrow').textContent =
@@ -625,7 +665,7 @@ document.querySelectorAll('[data-admin-filter]').forEach(b =>
 function renderAdminList(filter) {
   const container = document.getElementById('admin-list');
   let items = state.myBookings;
-  const today = isoDate(new Date());
+  const today = todayMskIso();
   if (filter === 'upcoming')
     items = items.filter(b => b.date >= today && b.status !== 'cancelled');
   else if (filter === 'today')
@@ -684,6 +724,33 @@ function adminAction(id, newStatus) {
 }
 
 // =====================================================================
+// ВРЕМЯ ПО МСК (UTC+3) — клиника в Севастополе работает по МСК.
+// Не использовать new Date() напрямую — это локальное время клиента,
+// которое может быть в любой таймзоне.
+// =====================================================================
+const MSK_OFFSET_MIN = 3 * 60;  // UTC+3
+
+function nowMsk() {
+  // Считаем «текущий момент в МСК», возвращая Date с компонентами
+  // в МСК (а не реальный UTC сдвиг). Это нужно чтобы isoDate()/getDate()
+  // возвращали день по МСК.
+  const utcNow = Date.now();
+  return new Date(utcNow + MSK_OFFSET_MIN * 60 * 1000 +
+                  new Date().getTimezoneOffset() * 60 * 1000);
+}
+
+function todayMskIso() {
+  return isoDate(nowMsk());
+}
+
+function mskAddDays(n) {
+  const d = nowMsk();
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+
+// =====================================================================
 // УТИЛИТЫ
 // =====================================================================
 function escapeHtml(s) {
@@ -697,8 +764,8 @@ function formatDate(iso) {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  const today = isoDate(new Date());
-  const tomorrow = isoDate(addDays(new Date(), 1));
+  const today = todayMskIso();
+  const tomorrow = isoDate(mskAddDays(1));
   if (iso === today) return 'Сегодня';
   if (iso === tomorrow) return 'Завтра';
   const wd = ['вс','пн','вт','ср','чт','пт','сб'];
@@ -727,8 +794,8 @@ document.querySelectorAll('#screen-book .filters .chip').forEach(chip => {
 // КАЛЕНДАРЬ (АДМИН) — месяц + клик по дню
 // =====================================================================
 const cal = {
-  year: new Date().getFullYear(),
-  month: new Date().getMonth(),  // 0..11
+  year: nowMsk().getFullYear(),
+  month: nowMsk().getMonth(),  // 0..11
   summary: {},                    // { "2026-05-22": {pending,done,cancelled} }
 };
 
@@ -786,7 +853,7 @@ function renderCalendarGrid() {
   // Какой день недели у 1-го числа (0=ВС … 6=СБ); сделаем понедельник=0
   const firstDow = (new Date(cal.year, cal.month, 1).getDay() + 6) % 7;
   const lastDay = new Date(cal.year, cal.month + 1, 0).getDate();
-  const todayIso = isoDate(new Date());
+  const todayIso = todayMskIso();
 
   let html = '';
   // Пустые ячейки в начале
