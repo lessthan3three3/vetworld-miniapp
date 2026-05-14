@@ -53,7 +53,18 @@ async function apiCall(path, options = {}) {
   }
   const resp = await fetch(url, { ...options, headers });
   if (!resp.ok) {
-    const text = await resp.text();
+    let text = '';
+    try { text = await resp.text(); } catch (e) {}
+    if (resp.status === 401) {
+      throw new Error(
+        INIT_DATA
+          ? 'Сервер отверг подпись Telegram. Перезапусти Mini App.'
+          : 'Откройте Mini App из Telegram (через бота), а не в обычном браузере.'
+      );
+    }
+    if (resp.status === 403) {
+      throw new Error('Нет прав администратора (только сотрудники клиники).');
+    }
     throw new Error(`API ${resp.status}: ${text || resp.statusText}`);
   }
   return resp.json();
