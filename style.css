@@ -843,3 +843,15 @@ a { color: inherit; text-decoration: none; }
   text-decoration: line-through;
   color: #888;
 }
+
+
+.summary-hint {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--vm-purple-soft);
+  color: var(--vm-purple-dark);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}

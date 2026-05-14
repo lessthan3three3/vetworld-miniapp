@@ -11,6 +11,22 @@ if (tg) {
     tg.setHeaderColor('#5E2A8E');
     tg.setBackgroundColor('#5E2A8E');
   } catch (e) {}
+  // Регистрируем обработчик MainButton ОДИН РАЗ — иначе при каждом
+  // заходе на шаг 3 цеплялся ещё один и они накапливались.
+  // Внутри проверяем что мы на шаге 3 (по visibility) и форма валидна.
+  try {
+    tg.MainButton.onClick(() => {
+      // Должны быть на шаге 3 формы
+      const step3 = document.getElementById('book-step-3');
+      if (!step3 || step3.classList.contains('hidden')) {
+        console.warn('[VetMir] MainButton clicked but not on step 3');
+        return;
+      }
+      submitBooking();
+    });
+  } catch (e) {
+    console.error('[VetMir] MainButton onClick failed:', e);
+  }
 }
 
 // ID администраторов клиники.
@@ -328,19 +344,25 @@ function setStep(n) {
   }
   if (tg) {
     if (n === 3) {
-      tg.MainButton.setText('Подтвердить запись');
-      tg.MainButton.color = '#FF7A33';
-      tg.MainButton.textColor = '#FFFFFF';
-      // Снимаем старые обработчики (накапливались при повторных
-      // заходах на шаг 3). Метод offClick существует в TG WebApp 6.1+.
-      try { tg.MainButton.offClick(submitBooking); } catch (e) {}
-      tg.MainButton.onClick(submitBooking);
-      tg.MainButton.show();
+      // Используем setParams (Telegram WebApp 6.10+) — это самый
+      // надёжный путь, без отдельных вызовов color/textColor/show().
+      try {
+        tg.MainButton.setParams({
+          text: 'Подтвердить запись',
+          color: '#FF7A33',
+          text_color: '#FFFFFF',
+          is_active: false,    // включится в updateSummary() когда форма ОК
+          is_visible: true,
+        });
+      } catch (e) {
+        // Fallback на старый API
+        tg.MainButton.setText('Подтвердить запись');
+        tg.MainButton.show();
+      }
       // Обновим состояние enable/disable по форме сразу
       updateSummary();
     } else {
-      try { tg.MainButton.offClick(submitBooking); } catch (e) {}
-      tg.MainButton.hide();
+      try { tg.MainButton.hide(); } catch (e) {}
     }
   }
 }
@@ -505,10 +527,15 @@ function updateSummary() {
     document.getElementById('sum-phone').textContent = state.form.phone;
   }
 
-  // MainButton — активна только при заполненной форме
+  // MainButton — активна только при заполненной форме.
+  // Используем setParams (надёжнее enable/disable).
   if (tg) {
-    if (valid) tg.MainButton.enable();
-    else tg.MainButton.disable();
+    try {
+      tg.MainButton.setParams({ is_active: !!valid });
+    } catch (e) {
+      if (valid) tg.MainButton.enable();
+      else tg.MainButton.disable();
+    }
   }
 }
 
@@ -833,12 +860,6 @@ document.querySelectorAll('#screen-book .filters .chip').forEach(chip => {
     chip.classList.add('active');
     renderServices(chip.dataset.cat, 'book-services-list');
   });
-});
-
-// Запасная кнопка подтверждения внутри формы (если MainButton почему-то
-// не сработала, например, Mini App открыт через inline-кнопку).
-document.getElementById('btn-confirm-fallback')?.addEventListener('click', () => {
-  submitBooking();
 });
 
 // =====================================================================
