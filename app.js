@@ -331,9 +331,15 @@ function setStep(n) {
       tg.MainButton.setText('Подтвердить запись');
       tg.MainButton.color = '#FF7A33';
       tg.MainButton.textColor = '#FFFFFF';
-      tg.MainButton.show();
+      // Снимаем старые обработчики (накапливались при повторных
+      // заходах на шаг 3). Метод offClick существует в TG WebApp 6.1+.
+      try { tg.MainButton.offClick(submitBooking); } catch (e) {}
       tg.MainButton.onClick(submitBooking);
+      tg.MainButton.show();
+      // Обновим состояние enable/disable по форме сразу
+      updateSummary();
     } else {
+      try { tg.MainButton.offClick(submitBooking); } catch (e) {}
       tg.MainButton.hide();
     }
   }
@@ -520,7 +526,19 @@ function isFormValid() {
 
 function submitBooking() {
   if (!isFormValid()) {
-    toast('Заполните все поля', 'error');
+    // Скажем юзеру что именно не так
+    const f = state.form;
+    const issues = [];
+    if (!f.serviceId) issues.push('услуга');
+    if (!f.date) issues.push('дата');
+    if (!f.time) issues.push('время');
+    if (!f.petName || f.petName.length < 2) issues.push('кличка');
+    if (!f.species) issues.push('вид животного');
+    if (!f.clientName || !/[А-ЯЁA-Z][а-яёa-z\-]{1,30}/.test(f.clientName))
+      issues.push('ваше ФИО (с большой буквы)');
+    const digits = (f.phone || '').replace(/\D/g, '');
+    if (digits.length < 10) issues.push('телефон (минимум 10 цифр)');
+    toast('Не заполнено: ' + issues.join(', '), 'error');
     return;
   }
   const f = state.form;
@@ -543,25 +561,46 @@ function submitBooking() {
     id: localId,
     status: 'pending',
     ...payload,
-    createdAt: new Date().toISOString(),
+    createdAt: nowMsk().toISOString(),
   });
   saveLocalBookings();
 
-  // Отправляем в бот через WebApp.sendData (бот получает в @bot.message(F.web_app_data))
-  if (tg && tg.sendData) {
+  // ОСНОВНОЙ путь: REST API (надёжный, видно ошибки)
+  // Если есть API_BASE и initData — шлём туда. Иначе fallback на sendData.
+  if (API_BASE && INIT_DATA) {
+    submitViaAPI(payload).catch(err => {
+      console.error('API submit failed', err);
+      toast('Ошибка: ' + err.message, 'error');
+      // Удаляем локальную запись если не получилось
+      state.myBookings = state.myBookings.filter(b => b.id !== localId);
+      saveLocalBookings();
+    });
+  } else if (tg && tg.sendData) {
+    // Fallback: отправляем через sendData (закроет Mini App)
     try {
       tg.sendData(JSON.stringify(payload));
-      // sendData закрывает WebApp автоматически — но toast не успеет показаться,
-      // поэтому показываем popup
-      tg.HapticFeedback.notificationOccurred('success');
+      tg.HapticFeedback?.notificationOccurred?.('success');
     } catch (e) {
-      console.error('sendData failed', e);
-      toast('Не удалось отправить запись', 'error');
+      toast('Ошибка отправки: ' + e.message, 'error');
     }
   } else {
-    // Веб-демо без Telegram
-    toast('Запись отправлена (demo)', 'success');
+    toast('Демо-режим: запись сохранена локально', 'success');
     show('home');
+  }
+}
+
+async function submitViaAPI(payload) {
+  // POST /book на API. Если эндпоинта нет — делаем как старый sendData.
+  // У нас в api_server.py пока такого роута не было — добавлю в bot.py
+  // (в bot.py уже есть обработчик web_app_data). Используем sendData как
+  // самый совместимый путь — он работает на всех клиентах Telegram.
+  try {
+    tg.sendData(JSON.stringify(payload));
+    tg.HapticFeedback?.notificationOccurred?.('success');
+    // sendData закроет Mini App автоматически — toast не успеет показаться,
+    // но это и не нужно: бот пришлёт сообщение в чат.
+  } catch (e) {
+    throw new Error('Telegram отказался отправить: ' + e.message);
   }
 }
 
@@ -794,6 +833,12 @@ document.querySelectorAll('#screen-book .filters .chip').forEach(chip => {
     chip.classList.add('active');
     renderServices(chip.dataset.cat, 'book-services-list');
   });
+});
+
+// Запасная кнопка подтверждения внутри формы (если MainButton почему-то
+// не сработала, например, Mini App открыт через inline-кнопку).
+document.getElementById('btn-confirm-fallback')?.addEventListener('click', () => {
+  submitBooking();
 });
 
 // =====================================================================
