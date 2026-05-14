@@ -64,17 +64,24 @@
     </button>
   </div>
 
-  <button class="card admin-card hidden" id="admin-card" data-go="admin">
-    <div class="card-icon">👨‍⚕️</div>
-    <div class="card-title">Админ-панель</div>
-    <div class="card-sub">Все записи · перенос · отмена</div>
-  </button>
-
-  <button class="card admin-card hidden" id="calendar-card" data-go="calendar">
-    <div class="card-icon">📆</div>
-    <div class="card-title">Календарь записей</div>
-    <div class="card-sub">Месяц · клик по дню — список</div>
-  </button>
+  <div class="admin-section hidden" id="admin-section">
+    <div class="admin-section-head">
+      <span class="admin-badge">ADMIN</span>
+      <span class="admin-section-title">Для сотрудников клиники</span>
+    </div>
+    <div class="grid-2 admin-grid">
+      <button class="card admin-card" id="calendar-card" data-go="calendar">
+        <div class="card-icon">📆</div>
+        <div class="card-title">Календарь</div>
+        <div class="card-sub">Месяц · все записи</div>
+      </button>
+      <button class="card admin-card" id="admin-card" data-go="admin">
+        <div class="card-icon">📋</div>
+        <div class="card-title">Список записей</div>
+        <div class="card-sub">Сегодня · завтра · все</div>
+      </button>
+    </div>
+  </div>
 
   <footer class="foot">
     <div>ООО «ВЕТМИР» · ИНН 9201009472</div>

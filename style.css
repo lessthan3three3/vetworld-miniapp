@@ -129,6 +129,52 @@ a { color: inherit; text-decoration: none; }
 .card.admin-card .card-title { color: white; }
 .card.admin-card .card-sub { color: rgba(255,255,255,0.8); }
 
+/* === Админская секция (карточки в сетке 2 колонки + заголовок) === */
+.admin-section {
+  margin: 4px 16px 0;
+  padding: 14px 14px 16px;
+  background: linear-gradient(135deg, var(--vm-purple-dark) 0%, #2a1340 100%);
+  border-radius: var(--radius);
+  box-shadow: var(--vm-shadow);
+  position: relative;
+}
+.admin-section::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--vm-orange) 0%, var(--vm-orange-dark) 100%);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.admin-section-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+  padding-top: 4px;
+}
+.admin-badge {
+  background: var(--vm-orange);
+  color: white;
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 1.2px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.admin-section-title {
+  color: rgba(255,255,255,0.85);
+  font-size: 13px; font-weight: 600;
+}
+.admin-section .grid-2.admin-grid {
+  padding: 0;
+  gap: 10px;
+}
+.admin-section .card.admin-card {
+  margin: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.admin-section .card.admin-card:active {
+  background: rgba(255,255,255,0.16);
+}
+
 /* ============== ФУТЕР ============== */
 .foot {
   text-align: center;

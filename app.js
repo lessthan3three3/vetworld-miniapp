@@ -168,9 +168,14 @@ function refreshHomeStatus() {
   document.getElementById('my-count').textContent =
     state.myBookings.length ? `${state.myBookings.length} активных` : 'нет записей';
 
+  // Debug: видно в консоли DevTools и в логе
+  console.log('[VetMir] isAdmin =', isAdmin, 'urlParams.role =',
+    urlParams.get('role'), 'API_BASE =', API_BASE);
+
   if (isAdmin) {
-    document.getElementById('admin-card').classList.remove('hidden');
-    document.getElementById('calendar-card').classList.remove('hidden');
+    const section = document.getElementById('admin-section');
+    if (section) section.classList.remove('hidden');
+    console.log('[VetMir] admin section revealed');
   }
 }
 
@@ -748,7 +753,11 @@ async function loadAndRenderCalendar() {
   const lastDay = new Date(cal.year, cal.month + 1, 0).getDate();
   const last = `${cal.year}-${pad(cal.month + 1)}-${pad(lastDay)}`;
   cal.summary = {};
-  if (API_BASE) {
+  if (!API_BASE) {
+    toast('API недоступен (открой через Telegram-бот)', 'error');
+  } else if (!INIT_DATA) {
+    toast('Демо-режим без авторизации Telegram', 'error');
+  } else {
     try {
       const data = await apiCall(
         `/admin/calendar?from=${first}&to=${last}`);
