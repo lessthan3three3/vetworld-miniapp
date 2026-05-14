@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ВЕТМИР — приложение клиники</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============= ГЛАВНАЯ ============= -->
+<section id="screen-home" class="screen active">
+  <header class="hero">
+    <div class="hero-logo">
+      <span class="logo-circle">🐾</span>
+      <div>
+        <div class="hero-brand">ВЕТМИР</div>
+        <div class="hero-tag">Ветеринарный госпиталь · Севастополь</div>
+      </div>
+    </div>
+    <div class="hero-status" id="hero-status">⏰ работаем</div>
+  </header>
+
+  <button class="cta primary" data-go="book">
+    <span class="cta-icon">📅</span>
+    <span>
+      <span class="cta-title">Записаться на приём</span>
+      <span class="cta-sub">Любая услуга · от 800 ₽ · 24/7 экстренный приём</span>
+    </span>
+    <span class="cta-arrow">→</span>
+  </button>
+
+  <div class="grid-2">
+    <button class="card" data-go="services">
+      <div class="card-icon">💊</div>
+      <div class="card-title">Услуги и цены</div>
+      <div class="card-sub">Прайс по категориям</div>
+    </button>
+    <button class="card" data-go="prep">
+      <div class="card-icon">📋</div>
+      <div class="card-title">Подготовка</div>
+      <div class="card-sub">Памятки к процедурам</div>
+    </button>
+    <button class="card" data-go="my-bookings">
+      <div class="card-icon">🗓</div>
+      <div class="card-title">Мои записи</div>
+      <div class="card-sub" id="my-count">—</div>
+    </button>
+    <button class="card" data-go="contacts">
+      <div class="card-icon">📞</div>
+      <div class="card-title">Контакты</div>
+      <div class="card-sub">2 филиала</div>
+    </button>
+    <button class="card promo" data-go="promo">
+      <div class="card-icon">🎁</div>
+      <div class="card-title">Акции</div>
+      <div class="card-sub">−30% весна 2026</div>
+    </button>
+    <button class="card emergency" data-go="emergency">
+      <div class="card-icon">🆘</div>
+      <div class="card-title">Экстренная помощь</div>
+      <div class="card-sub">Античный 18 · 24/7</div>
+    </button>
+  </div>
+
+  <button class="card admin-card hidden" id="admin-card" data-go="admin">
+    <div class="card-icon">👨‍⚕️</div>
+    <div class="card-title">Админ-панель</div>
+    <div class="card-sub">Все записи · перенос · отмена</div>
+  </button>
+
+  <footer class="foot">
+    <div>ООО «ВЕТМИР» · ИНН 9201009472</div>
+    <div>vetmir.org · vetmir@vetmir.org</div>
+  </footer>
+</section>
+
+<!-- ============= УСЛУГИ ============= -->
+<section id="screen-services" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Услуги и цены</h1>
+  </div>
+
+  <div class="filters" id="services-filters">
+    <button class="chip active" data-cat="all">Все</button>
+    <button class="chip" data-cat="consultation">Консультации</button>
+    <button class="chip" data-cat="prevention">Профилактика</button>
+    <button class="chip" data-cat="surgery">Хирургия</button>
+    <button class="chip" data-cat="dental">Стоматология</button>
+    <button class="chip" data-cat="diagnostics">Диагностика</button>
+    <button class="chip" data-cat="lab">Анализы</button>
+  </div>
+
+  <div class="services-list" id="services-list"></div>
+</section>
+
+<!-- ============= ПОДГОТОВКА ============= -->
+<section id="screen-prep" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Подготовка к процедурам</h1>
+  </div>
+  <div class="prep-list" id="prep-list"></div>
+</section>
+
+<section id="screen-prep-detail" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="prep">‹</button>
+    <h1 id="prep-detail-title">Памятка</h1>
+  </div>
+  <div class="prep-detail-body" id="prep-detail-body"></div>
+</section>
+
+<!-- ============= КОНТАКТЫ ============= -->
+<section id="screen-contacts" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Контакты и адреса</h1>
+  </div>
+
+  <div class="branch-card primary-branch">
+    <div class="branch-name">Античный, 18 <span class="badge-247">24/7</span></div>
+    <div class="branch-hours">9:00–00:00 без выходных<br>Экстренный приём — круглосуточно</div>
+    <div class="branch-phones">
+      <a href="tel:+79785205551" class="phone-row">
+        <span>📞</span>
+        <div>
+          <div class="phone-num">+7 (978) 520-55-51</div>
+          <div class="phone-label">Регистратура</div>
+        </div>
+      </a>
+      <a href="tel:+79785786535" class="phone-row">
+        <span>📞</span>
+        <div>
+          <div class="phone-num">+7 (978) 578-65-35</div>
+          <div class="phone-label">Стационар</div>
+        </div>
+      </a>
+      <a href="tel:+79782071752" class="phone-row">
+        <span>💬</span>
+        <div>
+          <div class="phone-num">+7 (978) 207-17-52</div>
+          <div class="phone-label">WhatsApp · Telegram</div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="branch-card">
+    <div class="branch-name">Хрусталёва, 84</div>
+    <div class="branch-hours">9:00–19:00 без выходных</div>
+    <div class="branch-phones">
+      <a href="tel:+79782740008" class="phone-row">
+        <span>📞</span>
+        <div>
+          <div class="phone-num">+7 (978) 274-00-08</div>
+          <div class="phone-label">Регистратура</div>
+        </div>
+      </a>
+      <a href="tel:+79785786720" class="phone-row">
+        <span>💬</span>
+        <div>
+          <div class="phone-num">+7 (978) 578-67-20</div>
+          <div class="phone-label">WhatsApp · Telegram</div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <a href="https://vetmir.org" target="_blank" class="link-card">
+    🌐 Сайт vetmir.org
+  </a>
+</section>
+
+<!-- ============= ЭКСТРЕННАЯ ============= -->
+<section id="screen-emergency" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Экстренная помощь</h1>
+  </div>
+
+  <div class="emergency-banner">
+    <div class="emergency-title">Если состояние критическое — звоните сразу</div>
+    <a href="tel:+79785205551" class="emergency-call">
+      📞 +7 (978) 520-55-51
+    </a>
+    <div class="emergency-sub">Античный, 18 — 24/7 экстренный приём без записи</div>
+  </div>
+
+  <div class="emergency-list">
+    <div class="emergency-item">⚠️ Сильное кровотечение — везите немедленно</div>
+    <div class="emergency-item">⚠️ Затруднённое дыхание, синий язык — критично</div>
+    <div class="emergency-item">⚠️ Судороги, потеря сознания — экстренно</div>
+    <div class="emergency-item">⚠️ Отравление (съел крысиный яд, бытовую химию) — звонить сразу</div>
+    <div class="emergency-item">⚠️ Травма после ДТП — везите, заранее предупредите по телефону</div>
+  </div>
+
+  <a href="tel:+79785205551" class="cta primary">
+    <span class="cta-icon">📞</span>
+    <span>
+      <span class="cta-title">Позвонить в клинику сейчас</span>
+      <span class="cta-sub">Античный, 18 — круглосуточно</span>
+    </span>
+  </a>
+</section>
+
+<!-- ============= ПРОМО ============= -->
+<section id="screen-promo" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Акции весна 2026</h1>
+  </div>
+
+  <div class="promo-banner">
+    <div class="promo-megaphone">📣</div>
+    <div class="promo-title">Нашему филиалу год!</div>
+    <div class="promo-sub">ул. Хрусталёва, 84</div>
+    <div class="promo-period">с 1 апреля по 1 июня 2026</div>
+  </div>
+
+  <div class="promo-list">
+    <div class="promo-card">
+      <div class="promo-card-name">Вакцинация</div>
+      <div class="promo-card-disc">−30%</div>
+    </div>
+    <div class="promo-card">
+      <div class="promo-card-name">Развёрнутый анализ крови</div>
+      <div class="promo-prices">
+        <span class="old-price">4 700 ₽</span>
+        <span class="new-price">3 200 ₽</span>
+      </div>
+      <div class="promo-card-disc">−30%</div>
+    </div>
+    <div class="promo-card">
+      <div class="promo-card-name">Стерилизация кошек</div>
+      <div class="promo-prices">
+        <span class="old-price">5 000 ₽</span>
+        <span class="new-price">3 500 ₽</span>
+      </div>
+      <div class="promo-card-tag">КАЖДУЮ СРЕДУ</div>
+    </div>
+    <div class="promo-card">
+      <div class="promo-card-name">Вакцинация щенков и котят</div>
+      <div class="promo-card-disc">−30%</div>
+      <div class="promo-card-bonus">+ Осмотр и консультация в подарок 🎁</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============= МОИ ЗАПИСИ ============= -->
+<section id="screen-my-bookings" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Мои записи</h1>
+  </div>
+  <div id="my-bookings-list" class="bookings-list"></div>
+</section>
+
+<!-- ============= ФОРМА ЗАПИСИ ============= -->
+<section id="screen-book" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Запись на приём</h1>
+  </div>
+
+  <div class="step-indicator">
+    <div class="step active" id="step-1">1</div>
+    <div class="step-line"></div>
+    <div class="step" id="step-2">2</div>
+    <div class="step-line"></div>
+    <div class="step" id="step-3">3</div>
+  </div>
+
+  <!-- Шаг 1: услуга -->
+  <div class="book-step" id="book-step-1">
+    <div class="step-title">Какая услуга?</div>
+    <div class="filters compact">
+      <button class="chip active" data-cat="all">Все</button>
+      <button class="chip" data-cat="consultation">Приём</button>
+      <button class="chip" data-cat="prevention">Прививки</button>
+      <button class="chip" data-cat="surgery">Операции</button>
+      <button class="chip" data-cat="dental">Стоматология</button>
+      <button class="chip" data-cat="diagnostics">Диагностика</button>
+    </div>
+    <div class="services-list compact" id="book-services-list"></div>
+  </div>
+
+  <!-- Шаг 2: дата и время -->
+  <div class="book-step hidden" id="book-step-2">
+    <div class="step-title">Когда удобно?</div>
+    <div class="selected-service" id="selected-service-pill"></div>
+    <div class="date-grid" id="date-grid"></div>
+    <div class="step-title small">Время</div>
+    <div class="time-grid" id="time-grid"></div>
+  </div>
+
+  <!-- Шаг 3: данные -->
+  <div class="book-step hidden" id="book-step-3">
+    <div class="step-title">Ваши данные</div>
+    <div class="selected-service" id="selected-service-pill-3"></div>
+    <div class="form-group">
+      <label>Кличка питомца</label>
+      <input type="text" id="inp-pet" placeholder="Барсик" maxlength="30" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Кто это? Вид животного</label>
+      <div class="radio-grid">
+        <label><input type="radio" name="species" value="dog"><span>🐕 Собака</span></label>
+        <label><input type="radio" name="species" value="cat"><span>🐈 Кошка</span></label>
+        <label><input type="radio" name="species" value="ferret"><span>🦝 Хорёк</span></label>
+        <label><input type="radio" name="species" value="rabbit"><span>🐰 Кролик</span></label>
+        <label><input type="radio" name="species" value="other"><span>🐾 Другой</span></label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Ваше ФИО</label>
+      <input type="text" id="inp-client" placeholder="Иванова Анна" maxlength="60" autocomplete="name">
+    </div>
+    <div class="form-group">
+      <label>Контактный телефон <span class="req">*</span></label>
+      <input type="tel" id="inp-phone" placeholder="+7 978 123 45 67" inputmode="tel" autocomplete="tel">
+      <div class="hint">Понадобится, чтобы администратор перезвонил при изменении расписания</div>
+    </div>
+
+    <div class="summary-card hidden" id="summary-card">
+      <div class="summary-title">Подтверждение записи</div>
+      <div class="summary-row"><span>Услуга</span><b id="sum-service">—</b></div>
+      <div class="summary-row"><span>Дата</span><b id="sum-date">—</b></div>
+      <div class="summary-row"><span>Время</span><b id="sum-time">—</b></div>
+      <div class="summary-row"><span>Питомец</span><b id="sum-pet">—</b></div>
+      <div class="summary-row"><span>Клиент</span><b id="sum-client">—</b></div>
+      <div class="summary-row"><span>Телефон</span><b id="sum-phone">—</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============= АДМИН-ПАНЕЛЬ ============= -->
+<section id="screen-admin" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1>Админ-панель</h1>
+  </div>
+
+  <div class="admin-stats" id="admin-stats">
+    <div class="stat-card">
+      <div class="stat-num" id="stat-today">—</div>
+      <div class="stat-label">Сегодня</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="stat-tomorrow">—</div>
+      <div class="stat-label">Завтра</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="stat-week">—</div>
+      <div class="stat-label">Неделя</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="chip active" data-admin-filter="upcoming">Ближайшие</button>
+    <button class="chip" data-admin-filter="today">Сегодня</button>
+    <button class="chip" data-admin-filter="all">Все</button>
+    <button class="chip" data-admin-filter="cancelled">Отменённые</button>
+  </div>
+
+  <div id="admin-list" class="bookings-list admin"></div>
+</section>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
