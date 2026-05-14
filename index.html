@@ -70,6 +70,12 @@
     <div class="card-sub">Все записи · перенос · отмена</div>
   </button>
 
+  <button class="card admin-card hidden" id="calendar-card" data-go="calendar">
+    <div class="card-icon">📆</div>
+    <div class="card-title">Календарь записей</div>
+    <div class="card-sub">Месяц · клик по дню — список</div>
+  </button>
+
   <footer class="foot">
     <div>ООО «ВЕТМИР» · ИНН 9201009472</div>
     <div>vetmir.org · vetmir@vetmir.org</div>
@@ -366,6 +372,42 @@
   </div>
 
   <div id="admin-list" class="bookings-list admin"></div>
+</section>
+
+<!-- ============= КАЛЕНДАРЬ (АДМИН) ============= -->
+<section id="screen-calendar" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="home">‹</button>
+    <h1 id="cal-title">Календарь</h1>
+  </div>
+
+  <div class="cal-nav">
+    <button class="icon-btn" id="cal-prev">‹</button>
+    <div class="cal-month" id="cal-month-label">—</div>
+    <button class="icon-btn" id="cal-next">›</button>
+  </div>
+
+  <div class="cal-week-head">
+    <span>пн</span><span>вт</span><span>ср</span><span>чт</span>
+    <span>пт</span><span>сб</span><span class="cal-wkn">вс</span>
+  </div>
+
+  <div class="cal-grid" id="cal-grid"></div>
+
+  <div class="cal-legend">
+    <span class="legend-dot pending"></span>Ожидают
+    <span class="legend-dot done"></span>Пришли
+    <span class="legend-dot cancelled"></span>Отменены
+  </div>
+</section>
+
+<!-- ============= ДЕНЬ (АДМИН) ============= -->
+<section id="screen-day" class="screen">
+  <div class="topbar">
+    <button class="icon-btn" data-back="calendar">‹</button>
+    <h1 id="day-title">День</h1>
+  </div>
+  <div id="day-list" class="bookings-list admin"></div>
 </section>
 
 <script src="data.js"></script>

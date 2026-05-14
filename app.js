@@ -13,14 +13,51 @@ if (tg) {
   } catch (e) {}
 }
 
-// ID администраторов клиники (видят админ-карточку и панель).
-// Сюда положить tg user_id Валерии Александровны и т.п.
-const ADMIN_USER_IDS = [
-  // 824517369,   // Валерия Александровна (заполнить реальным ID)
-];
+// ID администраторов клиники.
+// ВАЖНО: реальная защита админ-функций — на бэкенде (см. bot.py is_admin
+// и ADMIN_USER_IDS в .env). Здесь же мы просто скрываем UI-карточку
+// для не-админов, чтобы не вводить в заблуждение. Если хакер откроет
+// DevTools и удалит класс hidden — всё равно sendData будет отклонён
+// сервером (там жёсткая проверка через config.is_admin).
+//
+// Способ узнать «я админ?»: бот формирует webapp URL с ?role=admin для
+// своих сотрудников. Параметр приходит вместе со ссылкой и подделать
+// его клиент сам не может (он не может изменить URL внутри Telegram
+// reply-клавиатуры).
+const urlParams = new URLSearchParams(window.location.search);
+const isAdminHint = urlParams.get('role') === 'admin';
 
 const me = tg?.initDataUnsafe?.user || {};
-const isAdmin = ADMIN_USER_IDS.includes(me.id);
+// isAdmin — это ТОЛЬКО подсказка для UI. Бэк всё равно проверяет.
+const isAdmin = isAdminHint;
+
+// URL REST API (передаётся ботом в query как ?api=...).
+// Без него админка работает только в demo-режиме на localStorage.
+const API_BASE = urlParams.get('api') || '';
+
+// Telegram initData — передаётся в каждом запросе для подписи.
+// Сервер проверяет HMAC через BOT_TOKEN.
+const INIT_DATA = tg?.initData || '';
+
+async function apiCall(path, options = {}) {
+  if (!API_BASE) {
+    throw new Error('API не сконфигурирован (нет ?api= в URL)');
+  }
+  const url = API_BASE.replace(/\/$/, '') + path;
+  const headers = {
+    'X-Telegram-Init-Data': INIT_DATA,
+    ...(options.headers || {}),
+  };
+  if (options.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const resp = await fetch(url, { ...options, headers });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`API ${resp.status}: ${text || resp.statusText}`);
+  }
+  return resp.json();
+}
 
 // =====================================================================
 // СОСТОЯНИЕ
@@ -91,6 +128,12 @@ document.addEventListener('click', (e) => {
 });
 
 function onGo(target) {
+  // Защита от попыток перейти в админку через DevTools.
+  // Реальная защита всё равно на бэке, но здесь подстраховываемся.
+  if ((target === 'admin' || target === 'calendar') && !isAdmin) {
+    toast('Доступ только для администратора клиники', 'error');
+    return;
+  }
   switch (target) {
     case 'home': show('home'); break;
     case 'services': renderServices(); show('services'); break;
@@ -101,6 +144,7 @@ function onGo(target) {
     case 'my-bookings': renderMyBookings(); show('my-bookings'); break;
     case 'book': startBooking(); break;
     case 'admin': renderAdminPanel(); show('admin'); break;
+    case 'calendar': openCalendar(); break;
     default: show(target);
   }
 }
@@ -126,6 +170,7 @@ function refreshHomeStatus() {
 
   if (isAdmin) {
     document.getElementById('admin-card').classList.remove('hidden');
+    document.getElementById('calendar-card').classList.remove('hidden');
   }
 }
 
@@ -661,6 +706,171 @@ document.querySelectorAll('#screen-book .filters .chip').forEach(chip => {
     renderServices(chip.dataset.cat, 'book-services-list');
   });
 });
+
+// =====================================================================
+// КАЛЕНДАРЬ (АДМИН) — месяц + клик по дню
+// =====================================================================
+const cal = {
+  year: new Date().getFullYear(),
+  month: new Date().getMonth(),  // 0..11
+  summary: {},                    // { "2026-05-22": {pending,done,cancelled} }
+};
+
+const RU_MONTHS_FULL = [
+  'январь','февраль','март','апрель','май','июнь',
+  'июль','август','сентябрь','октябрь','ноябрь','декабрь',
+];
+
+document.getElementById('cal-prev').addEventListener('click', () => {
+  cal.month--;
+  if (cal.month < 0) { cal.month = 11; cal.year--; }
+  loadAndRenderCalendar();
+});
+document.getElementById('cal-next').addEventListener('click', () => {
+  cal.month++;
+  if (cal.month > 11) { cal.month = 0; cal.year++; }
+  loadAndRenderCalendar();
+});
+
+async function openCalendar() {
+  show('calendar');
+  await loadAndRenderCalendar();
+}
+
+async function loadAndRenderCalendar() {
+  const monthName = RU_MONTHS_FULL[cal.month];
+  document.getElementById('cal-month-label').textContent =
+    `${monthName} ${cal.year}`;
+  document.getElementById('cal-title').textContent = 'Календарь';
+
+  // Запросим сводку на месяц у API
+  const first = `${cal.year}-${pad(cal.month + 1)}-01`;
+  const lastDay = new Date(cal.year, cal.month + 1, 0).getDate();
+  const last = `${cal.year}-${pad(cal.month + 1)}-${pad(lastDay)}`;
+  cal.summary = {};
+  if (API_BASE) {
+    try {
+      const data = await apiCall(
+        `/admin/calendar?from=${first}&to=${last}`);
+      cal.summary = data.days || {};
+    } catch (e) {
+      console.error('cal load failed', e);
+      toast('Не удалось загрузить календарь: ' + e.message, 'error');
+    }
+  }
+  renderCalendarGrid();
+}
+
+function renderCalendarGrid() {
+  const grid = document.getElementById('cal-grid');
+  // Какой день недели у 1-го числа (0=ВС … 6=СБ); сделаем понедельник=0
+  const firstDow = (new Date(cal.year, cal.month, 1).getDay() + 6) % 7;
+  const lastDay = new Date(cal.year, cal.month + 1, 0).getDate();
+  const todayIso = isoDate(new Date());
+
+  let html = '';
+  // Пустые ячейки в начале
+  for (let i = 0; i < firstDow; i++) {
+    html += '<div class="cal-cell empty"></div>';
+  }
+  for (let d = 1; d <= lastDay; d++) {
+    const iso = `${cal.year}-${pad(cal.month + 1)}-${pad(d)}`;
+    const sum = cal.summary[iso];
+    const dow = new Date(cal.year, cal.month, d).getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isToday = iso === todayIso;
+    const total = sum ? (sum.pending || 0) + (sum.done || 0) + (sum.cancelled || 0) : 0;
+    const cls = [
+      'cal-cell',
+      isToday ? 'today' : '',
+      isWeekend && !isToday ? 'weekend' : '',
+      total > 0 ? 'has-bookings' : '',
+    ].filter(Boolean).join(' ');
+    let dots = '';
+    if (sum) {
+      if (sum.pending) dots += `<span class="cal-dot pending"></span>`;
+      if (sum.done) dots += `<span class="cal-dot done"></span>`;
+      if (sum.cancelled) dots += `<span class="cal-dot cancelled"></span>`;
+    }
+    const counter = total > 0 ? `<div class="cal-count">${total}</div>` : '';
+    html += `<div class="${cls}" data-day-iso="${iso}">
+      ${counter}
+      <div class="cal-day-num">${d}</div>
+      <div class="cal-dots">${dots}</div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('.cal-cell[data-day-iso]').forEach(c =>
+    c.addEventListener('click', () => openDay(c.dataset.dayIso)));
+}
+
+async function openDay(iso) {
+  document.getElementById('day-title').textContent =
+    `${formatDate(iso)} · записи`;
+  const list = document.getElementById('day-list');
+  list.innerHTML = '<div class="empty">Загружаем…</div>';
+  show('day');
+  try {
+    const data = await apiCall(`/admin/day/${iso}`);
+    renderDayList(data.items || [], iso);
+  } catch (e) {
+    list.innerHTML = `<div class="empty">Ошибка: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderDayList(items, iso) {
+  const list = document.getElementById('day-list');
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">
+      <div class="empty-icon">📭</div>
+      На ${formatDate(iso)} записей нет
+    </div>`;
+    return;
+  }
+  list.innerHTML = items.map(b => `
+    <div class="booking-item ${b.status === 'cancelled' ? 'cancelled' : (b.status === 'done' ? 'done' : '')}">
+      <div class="booking-head">
+        <div>
+          <div class="booking-id">№${b.id} · ${escapeHtml(b.client_name)}</div>
+          <div class="booking-service">${escapeHtml(b.service)}</div>
+        </div>
+        <div class="booking-status ${b.status}">${statusLabel(b.status)}</div>
+      </div>
+      <div class="booking-meta">
+        <span>⏰ ${b.time}</span>
+        <span>${speciesIcons([b.species])} ${escapeHtml(b.pet_name)}</span>
+        <span>📞 <a href="tel:${(b.phone||'').replace(/\D/g,'')}">${escapeHtml(b.phone)}</a></span>
+      </div>
+      ${b.status !== 'cancelled' && b.status !== 'done' ? `
+      <div class="booking-actions">
+        <button class="btn-action success" data-api-done="${b.id}">✓ Пришёл</button>
+        <button class="btn-action danger" data-api-cancel="${b.id}">✕ Отмена</button>
+      </div>` : ''}
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-api-done]').forEach(btn =>
+    btn.addEventListener('click', () => apiSetStatus(btn.dataset.apiDone, 'done', iso)));
+  list.querySelectorAll('[data-api-cancel]').forEach(btn =>
+    btn.addEventListener('click', () => apiSetStatus(btn.dataset.apiCancel, 'cancelled', iso)));
+}
+
+async function apiSetStatus(bookingId, status, iso) {
+  try {
+    await apiCall('/admin/status', {
+      method: 'POST',
+      body: JSON.stringify({ booking_id: Number(bookingId), status }),
+    });
+    tg?.HapticFeedback?.notificationOccurred?.('success');
+    toast(status === 'done' ? '✓ Отмечено' : '✕ Отменено', 'success');
+    // Перезагружаем день
+    await openDay(iso);
+    // Обновим кэш сводки на месяц
+    cal.summary = {};
+  } catch (e) {
+    toast('Ошибка: ' + e.message, 'error');
+  }
+}
+
 
 // =====================================================================
 // СТАРТ
