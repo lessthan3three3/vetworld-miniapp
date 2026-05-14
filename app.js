@@ -425,6 +425,12 @@ function isPastTime(dateIso, timeStr) {
 
 // Сетка времени — 9:00 ... 19:00 с шагом 30 минут
 function renderTimeGrid() {
+  // Покажем юзеру текущее время по МСК — для проверки и для контекста
+  const hint = document.getElementById('msk-now-hint');
+  if (hint) {
+    const n = nowMsk();
+    hint.textContent = `🕒 Сейчас в Севастополе: ${pad(n.getHours())}:${pad(n.getMinutes())} (МСК)`;
+  }
   const grid = document.getElementById('time-grid');
   const slots = [];
   for (let h = 9; h < 19; h++) {
