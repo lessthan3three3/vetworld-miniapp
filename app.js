@@ -582,52 +582,64 @@ function submitBooking() {
     phone: f.phone,
   };
 
-  // Сохраняем локально (отображается в «Мои записи» сразу же).
-  const localId = 'L' + Date.now();
-  state.myBookings.push({
-    id: localId,
-    status: 'pending',
-    ...payload,
-    createdAt: nowMsk().toISOString(),
-  });
-  saveLocalBookings();
+  // Пока идёт запрос — блокируем кнопку
+  try { tg?.MainButton?.showProgress?.(); } catch (e) {}
+  try { tg?.MainButton?.setParams?.({ is_active: false }); } catch (e) {}
 
-  // ОСНОВНОЙ путь: REST API (надёжный, видно ошибки)
-  // Если есть API_BASE и initData — шлём туда. Иначе fallback на sendData.
+  // Главный путь — REST API. Работает в любом сценарии (inline или
+  // reply кнопка), есть подтверждение и понятные ошибки.
   if (API_BASE && INIT_DATA) {
-    submitViaAPI(payload).catch(err => {
+    apiCall('/book', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).then(result => {
+      try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
+      if (result.ok) {
+        // Сохраняем локально для «Мои записи»
+        state.myBookings.push({
+          id: result.appointment_id,
+          status: 'pending',
+          ...payload,
+          createdAt: nowMsk().toISOString(),
+        });
+        saveLocalBookings();
+        tg?.HapticFeedback?.notificationOccurred?.('success');
+        // Показываем popup с результатом и закрываем Mini App
+        const text = `✅ Запись №${result.appointment_id} создана!\n\n` +
+          `${result.service}\n${result.pet_name}\n` +
+          `${result.date} в ${result.time}\n${result.phone}`;
+        try {
+          tg.showAlert(text, () => tg.close());
+        } catch (e) {
+          toast('Запись создана!', 'success');
+          setTimeout(() => tg?.close?.(), 1500);
+        }
+      } else {
+        toast('Не удалось: ' + (result.message || 'неизвестная ошибка'), 'error');
+        try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
+      }
+    }).catch(err => {
+      try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
+      try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
       console.error('API submit failed', err);
       toast('Ошибка: ' + err.message, 'error');
-      // Удаляем локальную запись если не получилось
-      state.myBookings = state.myBookings.filter(b => b.id !== localId);
-      saveLocalBookings();
     });
-  } else if (tg && tg.sendData) {
-    // Fallback: отправляем через sendData (закроет Mini App)
+    return;
+  }
+
+  // Fallback на sendData — для случая когда нет API
+  if (tg && tg.sendData) {
     try {
       tg.sendData(JSON.stringify(payload));
       tg.HapticFeedback?.notificationOccurred?.('success');
     } catch (e) {
-      toast('Ошибка отправки: ' + e.message, 'error');
+      toast('Не удалось отправить: ' + e.message, 'error');
+      try { tg?.MainButton?.hideProgress?.(); } catch (ee) {}
+      try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (ee) {}
     }
   } else {
     toast('Демо-режим: запись сохранена локально', 'success');
     show('home');
-  }
-}
-
-async function submitViaAPI(payload) {
-  // POST /book на API. Если эндпоинта нет — делаем как старый sendData.
-  // У нас в api_server.py пока такого роута не было — добавлю в bot.py
-  // (в bot.py уже есть обработчик web_app_data). Используем sendData как
-  // самый совместимый путь — он работает на всех клиентах Telegram.
-  try {
-    tg.sendData(JSON.stringify(payload));
-    tg.HapticFeedback?.notificationOccurred?.('success');
-    // sendData закроет Mini App автоматически — toast не успеет показаться,
-    // но это и не нужно: бот пришлёт сообщение в чат.
-  } catch (e) {
-    throw new Error('Telegram отказался отправить: ' + e.message);
   }
 }
 
