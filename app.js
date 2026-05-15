@@ -51,6 +51,10 @@ const isAdmin = isAdminHint;
 // Без него запись/календарь работать не будут.
 const API_BASE = urlParams.get('api') || '';
 
+// Подписанный auth-токен (fallback для Telegram Web, где initData
+// не отдаётся). Бот формирует его при создании ссылки.
+const SIGNED_AUTH = urlParams.get('auth') || '';
+
 // Если API нет — показываем юзеру баннер с просьбой зайти через бот
 if (!API_BASE) {
   console.warn('[VetMir] API_BASE отсутствует. Открой Mini App через ' +
@@ -67,7 +71,8 @@ async function apiCall(path, options = {}) {
   }
   const url = API_BASE.replace(/\/$/, '') + path;
   const headers = {
-    'X-Telegram-Init-Data': INIT_DATA,
+    ...(INIT_DATA ? { 'X-Telegram-Init-Data': INIT_DATA } : {}),
+    ...(SIGNED_AUTH ? { 'X-Auth-Token': SIGNED_AUTH } : {}),
     ...(options.headers || {}),
   };
   if (options.body && !headers['Content-Type']) {
@@ -79,8 +84,8 @@ async function apiCall(path, options = {}) {
     try { text = await resp.text(); } catch (e) {}
     if (resp.status === 401) {
       throw new Error(
-        INIT_DATA
-          ? 'Сервер отверг подпись Telegram. Перезапусти Mini App.'
+        (INIT_DATA || SIGNED_AUTH)
+          ? 'Сервер отверг авторизацию. Перезапусти Mini App через /start.'
           : 'Откройте Mini App из Telegram (через бота), а не в обычном браузере.'
       );
     }
@@ -612,7 +617,7 @@ form valid: ${isFormValid()}`;
 
   // Главный путь — REST API. Работает в любом сценарии (inline или
   // reply кнопка), есть подтверждение и понятные ошибки.
-  if (API_BASE && INIT_DATA) {
+  if (API_BASE && (INIT_DATA || SIGNED_AUTH)) {
     console.log('[VetMir] sending POST /book to', API_BASE);
     apiCall('/book', {
       method: 'POST',
@@ -668,11 +673,12 @@ form valid: ${isFormValid()}`;
     try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
     return;
   }
-  if (!INIT_DATA) {
+  if (!INIT_DATA && !SIGNED_AUTH) {
     try {
-      tg.showAlert('INIT_DATA пустой. Mini App открыт не из Telegram?');
+      tg.showAlert('Авторизация не пройдена. Перезапусти Mini App через ' +
+                   '/start в чате с ботом.');
     } catch (e) {
-      alert('INIT_DATA пустой');
+      alert('Авторизация не пройдена');
     }
     try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
     try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
