@@ -629,9 +629,10 @@ form valid: ${isFormValid()}`;
         });
         saveLocalBookings();
         tg?.HapticFeedback?.notificationOccurred?.('success');
-        const text = `✅ Запись №${result.appointment_id} создана!\n\n` +
-          `${result.service}\n${result.pet_name}\n` +
-          `${result.date} в ${result.time}\n${result.phone}`;
+        // Бот сам пришлёт подробное подтверждение в чат — здесь
+        // просто короткий popup и закрываем Mini App.
+        const text = `✅ Запись №${result.appointment_id} создана. ` +
+          `Подробности — в чате с ботом.`;
         try {
           tg.showAlert(text, () => tg.close());
         } catch (e) {
