@@ -552,8 +552,16 @@ function isFormValid() {
 }
 
 function submitBooking() {
+  // ОТЛАДКА: показываем alert чтобы понять, что обработчик вообще
+  // вызывается. Если alert не появляется — значит MainButton.onClick
+  // не подцепился.
+  const debugMsg = `submitBooking() called.
+API_BASE: ${API_BASE ? API_BASE.substring(0, 40) + '...' : '(пусто)'}
+INIT_DATA: ${INIT_DATA ? 'есть (' + INIT_DATA.length + ' chars)' : '(пусто)'}
+form valid: ${isFormValid()}`;
+  console.log('[VetMir]', debugMsg);
+
   if (!isFormValid()) {
-    // Скажем юзеру что именно не так
     const f = state.form;
     const issues = [];
     if (!f.serviceId) issues.push('услуга');
@@ -589,13 +597,14 @@ function submitBooking() {
   // Главный путь — REST API. Работает в любом сценарии (inline или
   // reply кнопка), есть подтверждение и понятные ошибки.
   if (API_BASE && INIT_DATA) {
+    console.log('[VetMir] sending POST /book to', API_BASE);
     apiCall('/book', {
       method: 'POST',
       body: JSON.stringify(payload),
     }).then(result => {
+      console.log('[VetMir] /book response:', result);
       try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
       if (result.ok) {
-        // Сохраняем локально для «Мои записи»
         state.myBookings.push({
           id: result.appointment_id,
           status: 'pending',
@@ -604,15 +613,14 @@ function submitBooking() {
         });
         saveLocalBookings();
         tg?.HapticFeedback?.notificationOccurred?.('success');
-        // Показываем popup с результатом и закрываем Mini App
         const text = `✅ Запись №${result.appointment_id} создана!\n\n` +
           `${result.service}\n${result.pet_name}\n` +
           `${result.date} в ${result.time}\n${result.phone}`;
         try {
           tg.showAlert(text, () => tg.close());
         } catch (e) {
-          toast('Запись создана!', 'success');
-          setTimeout(() => tg?.close?.(), 1500);
+          alert(text);
+          tg?.close?.();
         }
       } else {
         toast('Не удалось: ' + (result.message || 'неизвестная ошибка'), 'error');
@@ -621,25 +629,37 @@ function submitBooking() {
     }).catch(err => {
       try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
       try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
-      console.error('API submit failed', err);
-      toast('Ошибка: ' + err.message, 'error');
+      console.error('[VetMir] /book FAILED:', err);
+      // Жёсткий alert — toast'ы могут не показываться в Telegram Desktop
+      try {
+        tg.showAlert('Ошибка: ' + err.message);
+      } catch (e) {
+        alert('Ошибка: ' + err.message);
+      }
     });
     return;
   }
 
-  // Fallback на sendData — для случая когда нет API
-  if (tg && tg.sendData) {
+  // Fallback — нет API или нет initData
+  if (!API_BASE) {
     try {
-      tg.sendData(JSON.stringify(payload));
-      tg.HapticFeedback?.notificationOccurred?.('success');
+      tg.showAlert('API_BASE пустой. Открой Mini App из Telegram через /start.');
     } catch (e) {
-      toast('Не удалось отправить: ' + e.message, 'error');
-      try { tg?.MainButton?.hideProgress?.(); } catch (ee) {}
-      try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (ee) {}
+      alert('API_BASE пустой');
     }
-  } else {
-    toast('Демо-режим: запись сохранена локально', 'success');
-    show('home');
+    try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
+    try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
+    return;
+  }
+  if (!INIT_DATA) {
+    try {
+      tg.showAlert('INIT_DATA пустой. Mini App открыт не из Telegram?');
+    } catch (e) {
+      alert('INIT_DATA пустой');
+    }
+    try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
+    try { tg?.MainButton?.setParams?.({ is_active: true }); } catch (e) {}
+    return;
   }
 }
 
