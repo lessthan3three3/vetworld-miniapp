@@ -565,7 +565,10 @@ function isFormValid() {
   if (!f.serviceId || !f.date || !f.time) return false;
   if (!f.petName || f.petName.length < 2) return false;
   if (!f.species) return false;
-  if (!f.clientName || !/[А-ЯЁA-Z][а-яёa-z\-]{1,30}/.test(f.clientName)) return false;
+  // ФИО — просто непустое, минимум 2 буквы. Capitalization не требуем —
+  // потом нормализуем на бэке.
+  if (!f.clientName || f.clientName.replace(/[^A-Za-zА-Яа-яЁё]/g, '').length < 2)
+    return false;
   // телефон обязателен — мин 10 цифр
   const digits = (f.phone || '').replace(/\D/g, '');
   if (digits.length < 10) return false;
@@ -590,8 +593,8 @@ form valid: ${isFormValid()}`;
     if (!f.time) issues.push('время');
     if (!f.petName || f.petName.length < 2) issues.push('кличка');
     if (!f.species) issues.push('вид животного');
-    if (!f.clientName || !/[А-ЯЁA-Z][а-яёa-z\-]{1,30}/.test(f.clientName))
-      issues.push('ваше ФИО (с большой буквы)');
+    if (!f.clientName || f.clientName.replace(/[^A-Za-zА-Яа-яЁё]/g, '').length < 2)
+      issues.push('ваше имя или фамилия');
     const digits = (f.phone || '').replace(/\D/g, '');
     if (digits.length < 10) issues.push('телефон (минимум 10 цифр)');
     toast('Не заполнено: ' + issues.join(', '), 'error');
@@ -763,21 +766,31 @@ function statusLabel(s) {
 // =====================================================================
 // АДМИН-ПАНЕЛЬ
 // =====================================================================
-function renderAdminPanel() {
-  // Запрашиваем список записей у бота
-  tg?.sendData?.(JSON.stringify({ type: 'admin_get_bookings' }));
-  // Бот ответит сообщением, которое мы получим через initData при следующем
-  // открытии. Для демо — рисуем mock из локальных записей всех юзеров.
-  const all = state.myBookings;
+async function renderAdminPanel() {
+  // Запрашиваем все записи у API
+  let items = [];
+  if (API_BASE && (INIT_DATA || SIGNED_AUTH)) {
+    try {
+      const data = await apiCall('/admin/bookings');
+      items = data.items || [];
+    } catch (e) {
+      console.error('admin panel load failed', e);
+      toast('Не удалось загрузить: ' + e.message, 'error');
+    }
+  }
+  state.adminBookings = items;
+
+  // Стат-карточки
   const today = todayMskIso();
   const tomorrow = isoDate(mskAddDays(1));
   const weekEnd = isoDate(mskAddDays(7));
   document.getElementById('stat-today').textContent =
-    all.filter(b => b.date === today && b.status !== 'cancelled').length;
+    items.filter(b => b.date === today && b.status !== 'cancelled').length;
   document.getElementById('stat-tomorrow').textContent =
-    all.filter(b => b.date === tomorrow && b.status !== 'cancelled').length;
+    items.filter(b => b.date === tomorrow && b.status !== 'cancelled').length;
   document.getElementById('stat-week').textContent =
-    all.filter(b => b.date <= weekEnd && b.status !== 'cancelled').length;
+    items.filter(b => b.date <= weekEnd && b.status !== 'cancelled').length;
+
   renderAdminList('upcoming');
 }
 
@@ -791,7 +804,7 @@ document.querySelectorAll('[data-admin-filter]').forEach(b =>
 
 function renderAdminList(filter) {
   const container = document.getElementById('admin-list');
-  let items = state.myBookings;
+  let items = state.adminBookings || [];
   const today = todayMskIso();
   if (filter === 'upcoming')
     items = items.filter(b => b.date >= today && b.status !== 'cancelled');
@@ -800,7 +813,7 @@ function renderAdminList(filter) {
   else if (filter === 'cancelled')
     items = items.filter(b => b.status === 'cancelled');
   // 'all' — все
-  items = items.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+  items = items.slice().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
 
   if (!items.length) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">📭</div>Записей нет</div>`;
@@ -810,7 +823,7 @@ function renderAdminList(filter) {
     <div class="booking-item ${b.status === 'cancelled' ? 'cancelled' : (b.status === 'done' ? 'done' : '')}">
       <div class="booking-head">
         <div>
-          <div class="booking-id">№${escapeHtml(b.id)} · ${escapeHtml(b.client_name)}</div>
+          <div class="booking-id">№${b.id} · ${escapeHtml(b.client_name)}</div>
           <div class="booking-service">${escapeHtml(b.service)}</div>
         </div>
         <div class="booking-status ${b.status}">${statusLabel(b.status)}</div>
@@ -819,35 +832,35 @@ function renderAdminList(filter) {
         <span>📅 ${formatDate(b.date)}</span>
         <span>⏰ ${b.time}</span>
         <span>${speciesIcons([b.species])} ${escapeHtml(b.pet_name)}</span>
-        <span>📞 <a href="tel:${b.phone.replace(/\\D/g,'')}">${escapeHtml(b.phone)}</a></span>
+        <span>📞 <a href="tel:${(b.phone||'').replace(/\D/g,'')}">${escapeHtml(b.phone)}</a></span>
+        ${b.tg_username ? `<span>💬 <a href="https://t.me/${escapeHtml(b.tg_username)}">@${escapeHtml(b.tg_username)}</a></span>` :
+          (b.tg_user_id ? `<span>💬 <a href="tg://user?id=${b.tg_user_id}">написать</a></span>` : '')}
       </div>
+      ${b.status !== 'cancelled' && b.status !== 'done' ? `
       <div class="booking-actions">
-        <button class="btn-action success" data-done-id="${b.id}">Пришёл</button>
-        <button class="btn-action" data-resched-id="${b.id}">Перенести</button>
-        <button class="btn-action danger" data-admin-cancel="${b.id}">Отмена</button>
-      </div>
+        <button class="btn-action success" data-api-done="${b.id}">✓ Пришёл</button>
+        <button class="btn-action danger" data-api-cancel="${b.id}">✕ Отмена</button>
+      </div>` : ''}
     </div>
   `).join('');
-  container.querySelectorAll('[data-done-id]').forEach(btn =>
-    btn.addEventListener('click', () => adminAction(btn.dataset.doneId, 'done')));
-  container.querySelectorAll('[data-admin-cancel]').forEach(btn =>
-    btn.addEventListener('click', () => adminAction(btn.dataset.adminCancel, 'cancelled')));
-  container.querySelectorAll('[data-resched-id]').forEach(btn =>
-    btn.addEventListener('click', () => {
-      alert('Перенос: попросите клиента написать боту «перенести запись на ...»');
-    }));
+  container.querySelectorAll('[data-api-done]').forEach(btn =>
+    btn.addEventListener('click', () => adminApiAction(btn.dataset.apiDone, 'done')));
+  container.querySelectorAll('[data-api-cancel]').forEach(btn =>
+    btn.addEventListener('click', () => adminApiAction(btn.dataset.apiCancel, 'cancelled')));
 }
 
-function adminAction(id, newStatus) {
-  const bk = state.myBookings.find(x => x.id === id);
-  if (!bk) return;
-  bk.status = newStatus;
-  saveLocalBookings();
-  tg?.sendData?.(JSON.stringify({
-    type: 'admin_update', booking_id: id, status: newStatus,
-  }));
-  renderAdminPanel();
-  toast({done: 'Отмечено: пришёл', cancelled: 'Запись отменена'}[newStatus] || 'OK', 'success');
+async function adminApiAction(bookingId, status) {
+  try {
+    await apiCall('/admin/status', {
+      method: 'POST',
+      body: JSON.stringify({ booking_id: Number(bookingId), status }),
+    });
+    tg?.HapticFeedback?.notificationOccurred?.('success');
+    toast(status === 'done' ? '✓ Отмечено' : '✕ Отменено', 'success');
+    await renderAdminPanel();
+  } catch (e) {
+    toast('Ошибка: ' + e.message, 'error');
+  }
 }
 
 // =====================================================================
