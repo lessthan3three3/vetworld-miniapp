@@ -179,7 +179,7 @@ function onGo(target) {
     case 'contacts': show('contacts'); break;
     case 'emergency': show('emergency'); break;
     case 'promo': show('promo'); break;
-    case 'my-bookings': renderMyBookings(); show('my-bookings'); break;
+    case 'my-bookings': show('my-bookings'); renderMyBookings(); break;
     case 'book': startBooking(); break;
     case 'admin': renderAdminPanel(); show('admin'); break;
     case 'calendar': openCalendar(); break;
@@ -204,7 +204,7 @@ function refreshHomeStatus() {
     status.classList.add('closed');
   }
   document.getElementById('my-count').textContent =
-    state.myBookings.length ? `${state.myBookings.length} активных` : 'нет записей';
+    state.myBookings.length ? `${state.myBookings.length} активных` : 'нажмите чтобы посмотреть';
 
   // Debug: видно в консоли DevTools и в логе
   console.log('[VetMir] isAdmin =', isAdmin, 'urlParams.role =',
@@ -629,13 +629,8 @@ form valid: ${isFormValid()}`;
       console.log('[VetMir] /book response:', result);
       try { tg?.MainButton?.hideProgress?.(); } catch (e) {}
       if (result.ok) {
-        state.myBookings.push({
-          id: result.appointment_id,
-          status: 'pending',
-          ...payload,
-          createdAt: nowMsk().toISOString(),
-        });
-        saveLocalBookings();
+        // Запись теперь хранится в БД — локальный кеш не нужен.
+        // При открытии «Мои записи» данные подтянутся из API.
         tg?.HapticFeedback?.notificationOccurred?.('success');
         // Бот сам пришлёт подробное подтверждение в чат — здесь
         // просто короткий popup и закрываем Mini App.
@@ -693,20 +688,39 @@ form valid: ${isFormValid()}`;
 // МОИ ЗАПИСИ
 // =====================================================================
 function loadLocalBookings() {
+  // Раньше Mini App хранил записи в LocalStorage. Теперь источник
+  // истины — API. Локальный кеш чистим при загрузке.
   try {
-    const raw = localStorage.getItem('vm_bookings');
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch (e) { return []; }
+    localStorage.removeItem('vm_bookings');
+  } catch (e) {}
+  return [];
 }
 function saveLocalBookings() {
-  try { localStorage.setItem('vm_bookings', JSON.stringify(state.myBookings)); }
-  catch (e) {}
+  // Не используется — оставлено для совместимости со старым кодом
 }
 
-function renderMyBookings() {
+async function renderMyBookings() {
   const container = document.getElementById('my-bookings-list');
-  if (!state.myBookings.length) {
+  container.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>Загружаем…</div>';
+
+  let items = [];
+  if (API_BASE && (INIT_DATA || SIGNED_AUTH)) {
+    try {
+      const data = await apiCall('/my-bookings');
+      items = data.items || [];
+    } catch (e) {
+      console.error('my-bookings load failed', e);
+      container.innerHTML = `<div class="empty">
+        <div class="empty-icon">⚠️</div>
+        Не удалось загрузить: ${escapeHtml(e.message)}
+      </div>`;
+      return;
+    }
+  }
+
+  state.myBookings = items;
+
+  if (!items.length) {
     container.innerHTML = `
       <div class="empty">
         <div class="empty-icon">📋</div>
@@ -719,13 +733,13 @@ function renderMyBookings() {
     return;
   }
   // Сортируем по дате+времени
-  const items = [...state.myBookings].sort((a, b) =>
+  const sorted = items.slice().sort((a, b) =>
     (a.date + a.time).localeCompare(b.date + b.time));
-  container.innerHTML = items.map(b => `
-    <div class="booking-item ${b.status === 'cancelled' ? 'cancelled' : ''}">
+  container.innerHTML = sorted.map(b => `
+    <div class="booking-item ${b.status === 'cancelled' ? 'cancelled' : (b.status === 'done' ? 'done' : '')}">
       <div class="booking-head">
         <div>
-          <div class="booking-id">№${escapeHtml(b.id)}</div>
+          <div class="booking-id">№${b.id}</div>
           <div class="booking-service">${escapeHtml(b.service)}</div>
         </div>
         <div class="booking-status ${b.status}">${statusLabel(b.status)}</div>
@@ -742,19 +756,17 @@ function renderMyBookings() {
     </div>
   `).join('');
   container.querySelectorAll('[data-cancel-id]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (!confirm('Отменить эту запись?')) return;
-      const bk = state.myBookings.find(x => x.id === btn.dataset.cancelId);
-      if (bk) {
-        bk.status = 'cancelled';
-        saveLocalBookings();
-        // Уведомляем бота
-        tg?.sendData?.(JSON.stringify({
-          type: 'cancel_appointment',
-          local_id: bk.id, client_name: bk.client_name,
-        }));
-        renderMyBookings();
+      try {
+        await apiCall('/cancel-my', {
+          method: 'POST',
+          body: JSON.stringify({ booking_id: Number(btn.dataset.cancelId) }),
+        });
         toast('Запись отменена', 'success');
+        await renderMyBookings();
+      } catch (e) {
+        toast('Ошибка: ' + e.message, 'error');
       }
     });
   });
