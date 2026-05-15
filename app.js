@@ -48,8 +48,14 @@ const me = tg?.initDataUnsafe?.user || {};
 const isAdmin = isAdminHint;
 
 // URL REST API (передаётся ботом в query как ?api=...).
-// Без него админка работает только в demo-режиме на localStorage.
+// Без него запись/календарь работать не будут.
 const API_BASE = urlParams.get('api') || '';
+
+// Если API нет — показываем юзеру баннер с просьбой зайти через бот
+if (!API_BASE) {
+  console.warn('[VetMir] API_BASE отсутствует. Открой Mini App через ' +
+               '/start в Telegram, а не через закладку или Menu Button.');
+}
 
 // Telegram initData — передаётся в каждом запросе для подписи.
 // Сервер проверяет HMAC через BOT_TOKEN.
@@ -203,6 +209,16 @@ function refreshHomeStatus() {
     const section = document.getElementById('admin-section');
     if (section) section.classList.remove('hidden');
     console.log('[VetMir] admin section revealed');
+  }
+
+  // Покажем предупреждение если API не настроен
+  const noApiBanner = document.getElementById('no-api-banner');
+  if (noApiBanner) {
+    if (!API_BASE) {
+      noApiBanner.classList.remove('hidden');
+    } else {
+      noApiBanner.classList.add('hidden');
+    }
   }
 }
 
